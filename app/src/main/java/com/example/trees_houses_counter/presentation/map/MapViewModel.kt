@@ -63,15 +63,19 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    fun onPolygonDrag(dragDelta: LatLng) {
-        _mapState.update { state ->
-            val updatedCorners = state.selectedArea.map { corner ->
-                LatLng(
-                    corner.latitude + dragDelta.latitude,
-                    corner.longitude + dragDelta.longitude
-                )
+     fun onPolygonDrag(newCenter: LatLng) {
+        _mapState.update { current ->
+            if (current.selectedArea.size != 4) return@update current
+
+            val oldCenterLat = current.selectedArea.map { it.latitude }.average()
+            val oldCenterLng = current.selectedArea.map { it.longitude }.average()
+            val deltaLat = newCenter.latitude - oldCenterLat
+            val deltaLng = newCenter.longitude - oldCenterLng
+
+            val newArea = current.selectedArea.map {
+                LatLng(it.latitude + deltaLat, it.longitude + deltaLng)
             }
-            state.copy(selectedArea = updatedCorners)
+            current.copy(selectedArea = newArea)
         }
     }
 
@@ -120,7 +124,7 @@ class MapViewModel @Inject constructor(
         val report = Report(
             id = UUID.randomUUID().toString(),
             type = state.selectedType,
-            coordinates = state.selectedArea,
+            coordinates = state.selectedArea,  // Exact shape saved ✅
             userId = userId,
             data = reportData
         )
@@ -129,9 +133,8 @@ class MapViewModel @Inject constructor(
             _mapState.update { it.copy(isSubmitting = true) }
             submitReportUseCase(report)
                 .onSuccess {
-                    _mapState.update {
-                        MapState()
-                    }
+                    _mapState.value = MapState()  // Reset form
+                    loadUserReports()  // Refresh reports list ✅
                 }
                 .onFailure { error ->
                     _mapState.update {

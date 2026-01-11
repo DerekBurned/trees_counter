@@ -1,26 +1,64 @@
 package com.example.trees_houses_counter.presentation.map
 
 import android.Manifest
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.OpenWith
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.trees_houses_counter.domain.model.ReportData
 import com.example.trees_houses_counter.domain.model.ReportType
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polygon
+import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.maps.android.compose.rememberMarkerState
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalPermissionsApi::class, ExperimentalMaterial3Api::class)
@@ -166,17 +204,35 @@ fun MapContent(
         uiSettings = MapUiSettings(zoomControlsEnabled = false),
         onMapLongClick = onMapLongClick
     ) {
-        // Draw existing reports
         reports.forEach { report ->
+            val (strokeColor, fillColor) = when (report.type) {
+                ReportType.TREES -> Color.Green to Color.Green.copy(alpha = 0.3f)
+                ReportType.HOUSE -> Color.Red to Color.Red.copy(alpha = 0.3f)
+            }
+
             Polygon(
                 points = report.coordinates,
-                strokeColor = Color.Blue,
-                fillColor = Color.Blue.copy(alpha = 0.3f),
-                strokeWidth = 2f
+                strokeColor = strokeColor,
+                fillColor = fillColor,
+                strokeWidth = 4f
+            )
+
+            val center = report.coordinates.averageCenter()
+            Marker(
+                state = rememberMarkerState(position = center),
+                title = "${report.type.name} Report",
+                snippet = when (report.data) {
+                    is ReportData.TreesData -> "Trees: ${report.data.quantity}"
+                    is ReportData.HouseData -> "Height: ${report.data.height}m"
+                },
+                icon = BitmapDescriptorFactory.defaultMarker(
+                    when (report.type) {
+                        ReportType.TREES -> BitmapDescriptorFactory.HUE_GREEN
+                        ReportType.HOUSE -> BitmapDescriptorFactory.HUE_ORANGE
+                    }
+                )
             )
         }
-
-        // Draw selected area
         if (selectedArea.size == 4) {
             Polygon(
                 points = selectedArea,
@@ -185,60 +241,48 @@ fun MapContent(
                 strokeWidth = 3f
             )
 
-            // Calculate center of polygon for the drag marker
-            val centerLat = selectedArea.map { it.latitude }.average()
-            val centerLng = selectedArea.map { it.longitude }.average()
-            val centerPosition = LatLng(centerLat, centerLng)
+            val centerMarkerState = rememberUpdatedMarkerState(position = selectedArea.averageCenter())
+            val cornerMarkerStates = selectedArea.mapIndexed { index, pos ->
+                rememberUpdatedMarkerState(position = pos) to index
+            }
 
-            // Add center marker for dragging the whole polygon
-            CenterDragMarker(
-                initialPosition = centerPosition,
-                onPositionChange = { newCenter ->
-                    // Calculate the delta between old and new center
-                    val deltaLat = newCenter.latitude - centerLat
-                    val deltaLng = newCenter.longitude - centerLng
-                    onPolygonDrag(LatLng(deltaLat, deltaLng))
-                }
-            )
+            CenterDragMarker(markerState = centerMarkerState, onCenterDragged = onPolygonDrag)
 
-            // Draw draggable corner markers
-            selectedArea.forEachIndexed { index, position ->
+            cornerMarkerStates.forEach { (state, index) ->
                 DraggableCornerMarker(
-                    position = position,
+                    markerState = state,
                     title = "Corner ${index + 1}",
-                    onPositionChange = { newPosition ->
-                        onCornerDrag(index, newPosition)
-                    }
+                    onPositionChange = { newPos -> onCornerDrag(index, newPos) }
                 )
             }
         }
     }
 }
+@Composable
+fun rememberUpdatedMarkerState(position: LatLng): MarkerState {
+    return remember { MarkerState(position = position) }.apply { this.position = position }
+}
+
+private fun List<LatLng>.averageCenter(): LatLng {
+    val lat = map { it.latitude }.average()
+    val lng = map { it.longitude }.average()
+    return LatLng(lat, lng)
+}
 
 @Composable
 fun CenterDragMarker(
-    initialPosition: LatLng,
-    onPositionChange: (LatLng) -> Unit
+    markerState: MarkerState,
+    onCenterDragged: (LatLng) -> Unit
 ) {
-    var previousPosition by remember(initialPosition) { mutableStateOf(initialPosition) }
-    val markerState = remember(initialPosition) {
-        MarkerState(position = initialPosition)
-    }
-
     LaunchedEffect(markerState) {
         snapshotFlow { markerState.position }
             .distinctUntilChanged()
-            .collect { newPosition ->
-                if (newPosition != previousPosition) {
-                    onPositionChange(newPosition)
-                    previousPosition = newPosition
-                }
-            }
+            .collect { newCenter -> onCenterDragged(newCenter) }
     }
 
     Marker(
         state = markerState,
-        title = "Drag to Move",
+        title = "Drag to Move Entire Area",
         draggable = true,
         icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
     )
@@ -246,20 +290,14 @@ fun CenterDragMarker(
 
 @Composable
 fun DraggableCornerMarker(
-    position: LatLng,
+    markerState: MarkerState,
     title: String,
     onPositionChange: (LatLng) -> Unit
 ) {
-    val markerState = remember(position) {
-        MarkerState(position = position)
-    }
-
     LaunchedEffect(markerState) {
         snapshotFlow { markerState.position }
             .distinctUntilChanged()
-            .collect { newPosition ->
-                onPositionChange(newPosition)
-            }
+            .collect { newPosition -> onPositionChange(newPosition) }
     }
 
     Marker(
