@@ -14,5 +14,4 @@ data class ReportEntity(
     val userId: String,
     val timestamp: Long,
     val quantity: Int?, // For trees
-    val height: Double? // For house
 )

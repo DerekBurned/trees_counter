@@ -29,7 +29,7 @@ class AuthRepositoryImpl @Inject constructor(
         phoneNumber: String,
         callbacks: PhoneAuthProvider.OnVerificationStateChangedCallbacks
     ) {
-        // Implementation handled in ViewModel with PhoneAuthOptions
+
     }
 
     override suspend fun signInWithCredential(credential: PhoneAuthCredential): Result<String> {

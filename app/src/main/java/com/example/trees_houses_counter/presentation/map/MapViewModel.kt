@@ -118,7 +118,6 @@ class MapViewModel @Inject constructor(
 
         val reportData = when (state.selectedType) {
             ReportType.TREES -> ReportData.TreesData(state.quantity)
-            ReportType.HOUSE -> ReportData.HouseData(state.height)
         }
 
         val report = Report(

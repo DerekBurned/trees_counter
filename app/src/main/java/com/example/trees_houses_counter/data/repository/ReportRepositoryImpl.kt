@@ -24,14 +24,12 @@ class ReportRepositoryImpl @Inject constructor(
 
     override suspend fun submitReport(report: Report): Result<Unit> {
         return try {
-            // Save to Firebase
             val reportDto = report.toDto()
             firestore.collection("reports")
                 .document(report.id)
                 .set(reportDto)
                 .await()
 
-            // Save to local database
             val reportEntity = report.toEntity()
             reportDao.insertReport(reportEntity)
 
@@ -59,7 +57,6 @@ class ReportRepositoryImpl @Inject constructor(
             userId = userId,
             timestamp = timestamp,
             quantity = (data as? ReportData.TreesData)?.quantity,
-            height = (data as? ReportData.HouseData)?.height
         )
     }
 
@@ -71,8 +68,7 @@ class ReportRepositoryImpl @Inject constructor(
             coordinates = gson.toJson(coordPairs),
             userId = userId,
             timestamp = timestamp,
-            quantity = (data as? ReportData.TreesData)?.quantity,
-            height = (data as? ReportData.HouseData)?.height
+            quantity = (data as? ReportData.TreesData)?.quantity
         )
     }
 
@@ -85,7 +81,6 @@ class ReportRepositoryImpl @Inject constructor(
 
         val reportData = when (type) {
             "TREES" -> ReportData.TreesData(quantity ?: 0)
-            "HOUSE" -> ReportData.HouseData(height ?: 0.0)
             else -> ReportData.TreesData(0)
         }
 

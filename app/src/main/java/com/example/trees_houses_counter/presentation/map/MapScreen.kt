@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -42,10 +46,14 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.trees_houses_counter.domain.model.Report
 import com.example.trees_houses_counter.domain.model.ReportData
 import com.example.trees_houses_counter.domain.model.ReportType
+import com.example.trees_houses_counter.domain.model.TreeEntry
+import com.example.trees_houses_counter.domain.model.TreeSubType
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -119,10 +127,8 @@ fun MapScreen(
                 ReportDialog(
                     selectedType = mapState.selectedType,
                     quantity = mapState.quantity,
-                    height = mapState.height,
                     onTypeSelected = viewModel::onTypeSelected,
                     onQuantityChanged = viewModel::onQuantityChanged,
-                    onHeightChanged = viewModel::onHeightChanged,
                     onSubmit = viewModel::submitReport,
                     onDismiss = viewModel::dismissDialog,
                     isSubmitting = mapState.isSubmitting
@@ -185,7 +191,7 @@ fun AreaConfirmationButtons(
 
 @Composable
 fun MapContent(
-    reports: List<com.example.trees_houses_counter.domain.model.Report>,
+    reports: List<Report>,
     selectedArea: List<LatLng>,
     isAreaSelected: Boolean,
     onMapLongClick: (LatLng) -> Unit,
@@ -205,10 +211,9 @@ fun MapContent(
         onMapLongClick = onMapLongClick
     ) {
         reports.forEach { report ->
-            val (strokeColor, fillColor) = when (report.type) {
-                ReportType.TREES -> Color.Green to Color.Green.copy(alpha = 0.3f)
-                ReportType.HOUSE -> Color.Red to Color.Red.copy(alpha = 0.3f)
-            }
+            // Since only TREES type exists, directly assign colors
+            val strokeColor = Color.Green
+            val fillColor = Color.Green.copy(alpha = 0.3f)
 
             Polygon(
                 points = report.coordinates,
@@ -218,21 +223,16 @@ fun MapContent(
             )
 
             val center = report.coordinates.averageCenter()
+            val treesData = report.data as ReportData.TreesData
+
             Marker(
                 state = rememberMarkerState(position = center),
                 title = "${report.type.name} Report",
-                snippet = when (report.data) {
-                    is ReportData.TreesData -> "Trees: ${report.data.quantity}"
-                    is ReportData.HouseData -> "Height: ${report.data.height}m"
-                },
-                icon = BitmapDescriptorFactory.defaultMarker(
-                    when (report.type) {
-                        ReportType.TREES -> BitmapDescriptorFactory.HUE_GREEN
-                        ReportType.HOUSE -> BitmapDescriptorFactory.HUE_ORANGE
-                    }
-                )
+                snippet = "Trees: ${treesData.quantity}",
+                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
             )
         }
+
         if (selectedArea.size == 4) {
             Polygon(
                 points = selectedArea,
@@ -258,6 +258,7 @@ fun MapContent(
         }
     }
 }
+
 @Composable
 fun rememberUpdatedMarkerState(position: LatLng): MarkerState {
     return remember { MarkerState(position = position) }.apply { this.position = position }
@@ -308,18 +309,196 @@ fun DraggableCornerMarker(
     )
 }
 
+
 @Composable
-fun ReportDialog(
-    selectedType: ReportType,
-    quantity: Int,
-    height: Double,
-    onTypeSelected: (ReportType) -> Unit,
-    onQuantityChanged: (Int) -> Unit,
-    onHeightChanged: (Double) -> Unit,
+fun ReportDialog2(
+    treeEntries: List<TreeEntry>,
+    onAddEntry: () -> Unit,
+    onDeleteEntry: (Int) -> Unit,
+    onTypeChange: (Int, TreeSubType) -> Unit,
+    onQuantityChange: (Int, Int) -> Unit,
     onSubmit: () -> Unit,
     onDismiss: () -> Unit,
     isSubmitting: Boolean
 ) {
+    val isSubmitEnabled = !isSubmitting && treeEntries.any { it.quantity > 0 }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Submit Tree Report") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Tree Types:",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(qabottom = 8.dp)
+                )
+
+                treeEntries.forEachIndexed { index, entry ->
+                    TreeEntryCard(
+                        entry = entry,
+                        entryNumber = index + 1,
+                        onTypeChange = { newType -> onTypeChange(index, newType) },
+                        onQuantityChange = { newQuantity -> onQuantityChange(index, newQuantity) },
+                        onDelete = { onDeleteEntry(index) },
+                        canDelete = treeEntries.size > 1
+                    )
+
+                    if (index < treeEntries.size - 1) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onAddEntry,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add Tree Type")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSubmit,
+                enabled = isSubmitEnabled
+            ) {
+                if (isSubmitting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text("Submit")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun TreeEntryCard(
+    entry: TreeEntry,
+    entryNumber: Int,
+    onTypeChange: (TreeSubType) -> Unit,
+    onQuantityChange: (Int) -> Unit,
+    onDelete: () -> Unit,
+    canDelete: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Entry #$entryNumber",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (canDelete) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = entry.treeType == TreeSubType.DECIDUOUS,
+                    onClick = { onTypeChange(TreeSubType.DECIDUOUS) },
+                    label = { Text("Liściaste") }
+                )
+                FilterChip(
+                    selected = entry.treeType == TreeSubType.CONIFEROUS,
+                    onClick = { onTypeChange(TreeSubType.CONIFEROUS) },
+                    label = { Text("Iglaste") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = entry.quantity.takeIf { it > 0 }?.toString() ?: "",
+                onValueChange = { onQuantityChange(it.toIntOrNull() ?: 0) },
+                label = { Text("Quantity") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ReportDialog2Preview() {
+    MaterialTheme {
+        ReportDialog2(
+            treeEntries = listOf(
+                TreeEntry(id = 0, TreeSubType.DECIDUOUS, 10),
+                TreeEntry(id = 1, TreeSubType.CONIFEROUS, 5)
+            ),
+            onAddEntry = {},
+            onDeleteEntry = {},
+            onTypeChange = { _, _ -> },
+            onQuantityChange = { _, _ -> },
+            onSubmit = {},
+            onDismiss = {},
+            isSubmitting = false
+        )
+    }
+}
+
+
+@Composable
+fun ReportDialog(
+    selectedType: ReportType,
+    quantity: Int,
+    onTypeSelected: (ReportType) -> Unit,
+    onQuantityChanged: (Int) -> Unit,
+    onSubmit: () -> Unit,
+    onDismiss: () -> Unit,
+    isSubmitting: Boolean
+) {
+    val isTreesSelected = selectedType == ReportType.TREES
+    val isSubmitEnabled = !isSubmitting && isTreesSelected && quantity > 0
+    val quantityValue = quantity.takeIf { it > 0 }?.toString() ?: ""
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Submit Report") },
@@ -331,45 +510,42 @@ fun ReportDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
-                        selected = selectedType == ReportType.TREES,
+                        selected = isTreesSelected,
                         onClick = { onTypeSelected(ReportType.TREES) },
                         label = { Text("Trees") }
-                    )
-                    FilterChip(
-                        selected = selectedType == ReportType.HOUSE,
-                        onClick = { onTypeSelected(ReportType.HOUSE) },
-                        label = { Text("House") }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                when (selectedType) {
-                    ReportType.TREES -> {
-                        OutlinedTextField(
-                            value = if (quantity > 0) quantity.toString() else "",
-                            onValueChange = { onQuantityChanged(it.toIntOrNull() ?: 0) },
-                            label = { Text("Quantity") },
-                            modifier = Modifier.fillMaxWidth()
+                Column {
+                    Row{
+                        FilterChip(
+                            selected = isTreesSelected,
+                            onClick = { onTypeSelected(ReportType.TREES) },
+                            label = { Text("Liszczacte") }
                         )
-                    }
-                    ReportType.HOUSE -> {
-                        OutlinedTextField(
-                            value = if (height > 0) height.toString() else "",
-                            onValueChange = { onHeightChanged(it.toDoubleOrNull() ?: 0.0) },
-                            label = { Text("Height (meters)") },
-                            modifier = Modifier.fillMaxWidth()
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilterChip(
+                            selected = isTreesSelected,
+                            onClick = { onTypeSelected(ReportType.TREES) },
+                            label = { Text("Iglaste") }
                         )
+
                     }
+                    OutlinedTextField(
+                        value = quantityValue,
+                        onValueChange = { onQuantityChanged(it.toIntOrNull() ?: 0) },
+                        label = { Text("Quantity") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = onSubmit,
-                enabled = !isSubmitting &&
-                        ((selectedType == ReportType.TREES && quantity > 0) ||
-                                (selectedType == ReportType.HOUSE && height > 0))
+                enabled = isSubmitEnabled
             ) {
                 if (isSubmitting) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp))
@@ -384,4 +560,52 @@ fun ReportDialog(
             }
         }
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ReportDialogPreview() {
+    MaterialTheme {
+        ReportDialog(
+            selectedType = ReportType.TREES,
+            quantity = 10,
+            isSubmitting = false,
+            onTypeSelected = {},
+            onQuantityChanged = {},
+            onSubmit = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Report Dialog - Submitting")
+@Composable
+fun ReportDialogSubmittingPreview() {
+    MaterialTheme {
+        ReportDialog(
+            selectedType = ReportType.TREES,
+            quantity = 25,
+            isSubmitting = true,
+            onTypeSelected = {},
+            onQuantityChanged = {},
+            onSubmit = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, name = "Report Dialog - Empty")
+@Composable
+fun ReportDialogEmptyPreview() {
+    MaterialTheme {
+        ReportDialog(
+            selectedType = ReportType.TREES,
+            quantity = 0,
+            isSubmitting = false,
+            onTypeSelected = {},
+            onQuantityChanged = {},
+            onSubmit = {},
+            onDismiss = {}
+        )
+    }
 }
