@@ -3,8 +3,6 @@ package com.example.trees_houses_counter.presentation.map
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.trees_houses_counter.domain.model.Report
-import com.example.trees_houses_counter.domain.model.ReportData
-import com.example.trees_houses_counter.domain.model.ReportType
 import com.example.trees_houses_counter.domain.model.TreeEntry
 import com.example.trees_houses_counter.domain.model.TreeSubType
 import com.example.trees_houses_counter.domain.repository.AuthRepository
@@ -151,19 +149,16 @@ class MapViewModel @Inject constructor(
         if (state.selectedArea.size != 4) return
         if (state.treeEntries.isEmpty() || state.treeEntries.all { it.quantity == 0 }) return
 
-        val totalQuantity = state.treeEntries.sumOf { it.quantity }
+        val validEntries = state.treeEntries.filter { it.quantity > 0 }
+        val totalQuantity = validEntries.sumOf { it.quantity }
 
-        val reportData = ReportData.TreesData(
-            quantity = totalQuantity,
-            entries = state.treeEntries.filter { it.quantity > 0 }
-        )
-
+        // Look how much cleaner this is now!
         val report = Report(
             id = UUID.randomUUID().toString(),
-            type = ReportType.TREES,
             coordinates = state.selectedArea,
             userId = userId,
-            data = reportData
+            totalQuantity = totalQuantity,
+            entries = validEntries
         )
 
         viewModelScope.launch {

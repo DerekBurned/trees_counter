@@ -4,9 +4,11 @@ import com.example.trees_houses_counter.data.local.dao.ReportDao
 import com.example.trees_houses_counter.data.local.entity.ReportEntity
 import com.example.trees_houses_counter.data.remote.dto.CoordinateDto
 import com.example.trees_houses_counter.data.remote.dto.ReportDto
+import com.example.trees_houses_counter.data.remote.dto.TreeEntryDto
 import com.example.trees_houses_counter.domain.model.Report
 import com.example.trees_houses_counter.domain.model.ReportData
 import com.example.trees_houses_counter.domain.model.ReportType
+import com.example.trees_houses_counter.domain.model.TreeEntry
 import com.example.trees_houses_counter.domain.repository.ReportRepository
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.firestore.FirebaseFirestore
@@ -52,11 +54,11 @@ class ReportRepositoryImpl @Inject constructor(
     private fun Report.toDto(): ReportDto {
         return ReportDto(
             id = id,
-            type = type.name,
             coordinates = coordinates.map { CoordinateDto(it.latitude, it.longitude) },
             userId = userId,
             timestamp = timestamp,
-            quantity = (data as? ReportData.TreesData)?.quantity,
+            totalQuantity = totalQuantity,
+            entries = entries.map { TreeEntryDto(it.id, it.treeType.name, it.quantity) }
         )
     }
 
@@ -64,11 +66,11 @@ class ReportRepositoryImpl @Inject constructor(
         val coordPairs = coordinates.map { it.latitude to it.longitude }
         return ReportEntity(
             id = id,
-            type = type.name,
             coordinates = gson.toJson(coordPairs),
             userId = userId,
             timestamp = timestamp,
-            quantity = (data as? ReportData.TreesData)?.quantity
+            totalQuantity = totalQuantity,
+            entries = gson.toJson(entries)
         )
     }
 
@@ -76,21 +78,25 @@ class ReportRepositoryImpl @Inject constructor(
         val coordPairs: List<Pair<Double, Double>> = gson.fromJson(
             coordinates,
             object : com.google.gson.reflect.TypeToken<List<Pair<Double, Double>>>() {}.type
-        )
+        ) ?: emptyList()
         val latLngs = coordPairs.map { LatLng(it.first, it.second) }
 
-        val reportData = when (type) {
-            "TREES" -> ReportData.TreesData(quantity ?: 0)
-            else -> ReportData.TreesData(0)
+        val entriesList: List<TreeEntry> = try {
+            gson.fromJson(
+                entries,
+                object : com.google.gson.reflect.TypeToken<List<TreeEntry>>() {}.type
+            ) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
         }
 
         return Report(
             id = id,
-            type = ReportType.valueOf(type),
             coordinates = latLngs,
             userId = userId,
             timestamp = timestamp,
-            data = reportData
+            totalQuantity = totalQuantity,
+            entries = entriesList
         )
     }
 }

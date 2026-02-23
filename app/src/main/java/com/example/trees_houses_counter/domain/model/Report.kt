@@ -3,24 +3,13 @@ package com.example.trees_houses_counter.domain.model
 import com.google.android.gms.maps.model.LatLng
 
 data class Report(
-    val id: String = "",
-    val type: ReportType,
+    val id: String,
     val coordinates: List<LatLng>,
     val userId: String,
     val timestamp: Long = System.currentTimeMillis(),
-    val data: ReportData
+    val totalQuantity: Int,
+    val entries: List<TreeEntry>
 )
-
-enum class ReportType {
-    TREES
-}
-
-sealed class ReportData {
-    data class TreesData(
-        val quantity: Int,
-        val entries: List<TreeEntry> = emptyList()
-    ) : ReportData()
-}
 
 data class User(
     val id: String,

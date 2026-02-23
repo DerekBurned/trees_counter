@@ -50,8 +50,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.trees_houses_counter.domain.model.Report
-import com.example.trees_houses_counter.domain.model.ReportData
-import com.example.trees_houses_counter.domain.model.ReportType
 import com.example.trees_houses_counter.domain.model.TreeEntry
 import com.example.trees_houses_counter.domain.model.TreeSubType
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -212,7 +210,6 @@ fun MapContent(
         onMapLongClick = onMapLongClick
     ) {
         reports.forEach { report ->
-            // Since only TREES type exists, directly assign colors
             val strokeColor = Color.Green
             val fillColor = Color.Green.copy(alpha = 0.3f)
 
@@ -224,12 +221,11 @@ fun MapContent(
             )
 
             val center = report.coordinates.averageCenter()
-            val treesData = report.data as ReportData.TreesData
 
             Marker(
                 state = rememberMarkerState(position = center),
-                title = "${report.type.name} Report",
-                snippet = "Trees: ${treesData.quantity}",
+                title = "Tree Report",
+                snippet = "Total Trees: ${report.totalQuantity}", // Directly access totalQuantity
                 icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
             )
         }
@@ -286,7 +282,7 @@ fun CenterDragMarker(
         state = markerState,
         title = "Drag to Move Entire Area",
         draggable = true,
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
     )
 }
 
@@ -306,7 +302,7 @@ fun DraggableCornerMarker(
         state = markerState,
         title = title,
         draggable = true,
-        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+        icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
     )
 }
 
