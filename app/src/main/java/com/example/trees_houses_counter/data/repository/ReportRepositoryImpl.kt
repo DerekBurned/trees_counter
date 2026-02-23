@@ -6,8 +6,6 @@ import com.example.trees_houses_counter.data.remote.dto.CoordinateDto
 import com.example.trees_houses_counter.data.remote.dto.ReportDto
 import com.example.trees_houses_counter.data.remote.dto.TreeEntryDto
 import com.example.trees_houses_counter.domain.model.Report
-import com.example.trees_houses_counter.domain.model.ReportData
-import com.example.trees_houses_counter.domain.model.ReportType
 import com.example.trees_houses_counter.domain.model.TreeEntry
 import com.example.trees_houses_counter.domain.repository.ReportRepository
 import com.google.android.gms.maps.model.LatLng

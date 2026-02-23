@@ -41,7 +41,7 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "report_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides
