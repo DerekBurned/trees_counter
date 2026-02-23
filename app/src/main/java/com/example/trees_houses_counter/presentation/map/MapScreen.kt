@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -57,6 +58,7 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.DragState
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
@@ -109,8 +111,8 @@ fun MapScreen(
                 selectedArea = mapState.selectedArea,
                 isAreaSelected = mapState.isAreaSelected,
                 onMapLongClick = viewModel::onMapLongClick,
-                onCornerDrag = viewModel::onCornerDrag,
-                onPolygonDrag = viewModel::onPolygonDrag
+                onCornerDragEnd = viewModel::onCornerDrag, // Renamed parameter
+                onPolygonDragEnd = viewModel::onPolygonDrag // Renamed parameter
             )
 
             if (mapState.isAreaSelected && mapState.selectedArea.isNotEmpty()) {
@@ -188,14 +190,15 @@ fun AreaConfirmationButtons(
     }
 }
 
+
 @Composable
 fun MapContent(
     reports: List<Report>,
     selectedArea: List<LatLng>,
     isAreaSelected: Boolean,
     onMapLongClick: (LatLng) -> Unit,
-    onCornerDrag: (Int, LatLng) -> Unit,
-    onPolygonDrag: (LatLng) -> Unit
+    onCornerDragEnd: (Int, LatLng) -> Unit,
+    onPolygonDragEnd: (LatLng) -> Unit
 ) {
     val defaultPosition = LatLng(37.7749, -122.4194)
     val cameraPositionState = rememberCameraPositionState {
@@ -209,6 +212,7 @@ fun MapContent(
         uiSettings = MapUiSettings(zoomControlsEnabled = false),
         onMapLongClick = onMapLongClick
     ) {
+        // Draw submitted reports
         reports.forEach { report ->
             val strokeColor = Color.Green
             val fillColor = Color.Green.copy(alpha = 0.3f)
@@ -225,31 +229,45 @@ fun MapContent(
             Marker(
                 state = rememberMarkerState(position = center),
                 title = "Tree Report",
-                snippet = "Total Trees: ${report.totalQuantity}", // Directly access totalQuantity
+                snippet = "Total Trees: ${report.totalQuantity}",
                 icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
             )
         }
 
+        // Draw the active selection area
         if (selectedArea.size == 4) {
+            // 1. Create local marker states that re-initialize ONLY when the ViewModel's selectedArea changes
+            val cornerMarkerStates = remember(selectedArea) {
+                selectedArea.map { MarkerState(position = it) }
+            }
+            val centerMarkerState = remember(selectedArea) {
+                MarkerState(position = selectedArea.averageCenter())
+            }
+
+            // 2. The Polygon reads DIRECTLY from the local markers in real-time for 60fps rendering
+            val dynamicPolygonPoints by remember {
+                derivedStateOf { cornerMarkerStates.map { it.position } }
+            }
+
             Polygon(
-                points = selectedArea,
+                points = dynamicPolygonPoints,
                 strokeColor = Color.Red,
                 fillColor = Color.Red.copy(alpha = 0.3f),
                 strokeWidth = 3f
             )
 
-            val centerMarkerState = rememberUpdatedMarkerState(position = selectedArea.averageCenter())
-            val cornerMarkerStates = selectedArea.mapIndexed { index, pos ->
-                rememberUpdatedMarkerState(position = pos) to index
-            }
+            // 3. Render the Center Marker
+            CenterDragMarker(
+                markerState = centerMarkerState,
+                onDragEnd = onPolygonDragEnd
+            )
 
-            CenterDragMarker(markerState = centerMarkerState, onCenterDragged = onPolygonDrag)
-
-            cornerMarkerStates.forEach { (state, index) ->
+            // 4. Render the Corner Markers
+            cornerMarkerStates.forEachIndexed { index, state ->
                 DraggableCornerMarker(
                     markerState = state,
                     title = "Corner ${index + 1}",
-                    onPositionChange = { newPos -> onCornerDrag(index, newPos) }
+                    onDragEnd = { newPos -> onCornerDragEnd(index, newPos) }
                 )
             }
         }
@@ -257,25 +275,14 @@ fun MapContent(
 }
 
 @Composable
-fun rememberUpdatedMarkerState(position: LatLng): MarkerState {
-    return remember { MarkerState(position = position) }.apply { this.position = position }
-}
-
-private fun List<LatLng>.averageCenter(): LatLng {
-    val lat = map { it.latitude }.average()
-    val lng = map { it.longitude }.average()
-    return LatLng(lat, lng)
-}
-
-@Composable
 fun CenterDragMarker(
     markerState: MarkerState,
-    onCenterDragged: (LatLng) -> Unit
+    onDragEnd: (LatLng) -> Unit
 ) {
-    LaunchedEffect(markerState) {
-        snapshotFlow { markerState.position }
-            .distinctUntilChanged()
-            .collect { newCenter -> onCenterDragged(newCenter) }
+    LaunchedEffect(markerState.dragState) {
+        if (markerState.dragState == DragState.END) {
+            onDragEnd(markerState.position)
+        }
     }
 
     Marker(
@@ -290,12 +297,13 @@ fun CenterDragMarker(
 fun DraggableCornerMarker(
     markerState: MarkerState,
     title: String,
-    onPositionChange: (LatLng) -> Unit
+    onDragEnd: (LatLng) -> Unit
 ) {
-    LaunchedEffect(markerState) {
-        snapshotFlow { markerState.position }
-            .distinctUntilChanged()
-            .collect { newPosition -> onPositionChange(newPosition) }
+    // Only fire the callback to the ViewModel when the user drops the marker
+    LaunchedEffect(markerState.dragState) {
+        if (markerState.dragState == DragState.END) {
+            onDragEnd(markerState.position)
+        }
     }
 
     Marker(
@@ -306,7 +314,11 @@ fun DraggableCornerMarker(
     )
 }
 
-
+private fun List<LatLng>.averageCenter(): LatLng {
+    val lat = map { it.latitude }.average()
+    val lng = map { it.longitude }.average()
+    return LatLng(lat, lng)
+}
 @Composable
 fun ReportDialog2(
     treeEntries: List<TreeEntry>,
