@@ -16,13 +16,17 @@ enum class ReportType {
 }
 
 sealed class ReportData {
-    data class TreesData(val quantity: Int) : ReportData()
+    data class TreesData(
+        val quantity: Int,
+        val entries: List<TreeEntry> = emptyList()
+    ) : ReportData()
 }
 
 data class User(
     val id: String,
     val phoneNumber: String
 )
+
 data class TreeEntry(
     val id: Int,
     val treeType: TreeSubType = TreeSubType.DECIDUOUS,

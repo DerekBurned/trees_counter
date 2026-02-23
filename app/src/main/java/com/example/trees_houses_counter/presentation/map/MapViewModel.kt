@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.trees_houses_counter.domain.model.Report
 import com.example.trees_houses_counter.domain.model.ReportData
 import com.example.trees_houses_counter.domain.model.ReportType
+import com.example.trees_houses_counter.domain.model.TreeEntry
+import com.example.trees_houses_counter.domain.model.TreeSubType
 import com.example.trees_houses_counter.domain.repository.AuthRepository
 import com.example.trees_houses_counter.domain.usecase.GetUserReportsUseCase
 import com.example.trees_houses_counter.domain.usecase.SubmitReportUseCase
@@ -42,7 +44,6 @@ class MapViewModel @Inject constructor(
     }
 
     fun onMapLongClick(position: LatLng) {
-        // Only allow new selection if not currently editing
         if (_mapState.value.isAreaSelected) return
 
         val corners = calculateRectangleCorners(position)
@@ -63,7 +64,7 @@ class MapViewModel @Inject constructor(
         }
     }
 
-     fun onPolygonDrag(newCenter: LatLng) {
+    fun onPolygonDrag(newCenter: LatLng) {
         _mapState.update { current ->
             if (current.selectedArea.size != 4) return@update current
 
@@ -83,7 +84,7 @@ class MapViewModel @Inject constructor(
         _mapState.update {
             it.copy(
                 showDialog = true,
-                isAreaSelected = false
+                isAreaSelected = true
             )
         }
     }
@@ -93,21 +94,54 @@ class MapViewModel @Inject constructor(
             it.copy(
                 selectedArea = emptyList(),
                 isAreaSelected = false,
-                showDialog = false
+                showDialog = false,
+                treeEntries = listOf(TreeEntry(id = 0, TreeSubType.DECIDUOUS, 0))
             )
         }
     }
 
-    fun onTypeSelected(type: ReportType) {
-        _mapState.update { it.copy(selectedType = type) }
+    fun onAddTreeEntry(): () -> Unit = {
+        val currentEntries = _mapState.value.treeEntries
+        val selectedTypes = currentEntries.map { it.treeType }.toSet()
+        val availableTypes = TreeSubType.entries.filter { it !in selectedTypes }
+
+        if (availableTypes.isNotEmpty()) {
+            val newEntry = TreeEntry(
+                id = currentEntries.size,
+                treeType = availableTypes.first(),
+                quantity = 0
+            )
+            _mapState.update {
+                it.copy(treeEntries = it.treeEntries + newEntry)
+            }
+        }
     }
 
-    fun onQuantityChanged(quantity: Int) {
-        _mapState.update { it.copy(quantity = quantity) }
+    fun onDeleteTreeEntry(index: Int) {
+        _mapState.update { state ->
+            val updatedEntries = state.treeEntries.toMutableList().apply {
+                removeAt(index)
+            }.mapIndexed { i, entry -> entry.copy(id = i) }
+            state.copy(treeEntries = updatedEntries)
+        }
     }
 
-    fun onHeightChanged(height: Double) {
-        _mapState.update { it.copy(height = height) }
+    fun onTreeTypeChange(index: Int, newType: TreeSubType) {
+        _mapState.update { state ->
+            val updatedEntries = state.treeEntries.toMutableList().apply {
+                this[index] = this[index].copy(treeType = newType)
+            }
+            state.copy(treeEntries = updatedEntries)
+        }
+    }
+
+    fun onTreeQuantityChange(index: Int, quantity: Int) {
+        _mapState.update { state ->
+            val updatedEntries = state.treeEntries.toMutableList().apply {
+                this[index] = this[index].copy(quantity = quantity)
+            }
+            state.copy(treeEntries = updatedEntries)
+        }
     }
 
     fun submitReport() {
@@ -115,15 +149,19 @@ class MapViewModel @Inject constructor(
         val userId = authRepository.currentUserId ?: return
 
         if (state.selectedArea.size != 4) return
+        if (state.treeEntries.isEmpty() || state.treeEntries.all { it.quantity == 0 }) return
 
-        val reportData = when (state.selectedType) {
-            ReportType.TREES -> ReportData.TreesData(state.quantity)
-        }
+        val totalQuantity = state.treeEntries.sumOf { it.quantity }
+
+        val reportData = ReportData.TreesData(
+            quantity = totalQuantity,
+            entries = state.treeEntries.filter { it.quantity > 0 }
+        )
 
         val report = Report(
             id = UUID.randomUUID().toString(),
-            type = state.selectedType,
-            coordinates = state.selectedArea,  // Exact shape saved ✅
+            type = ReportType.TREES,
+            coordinates = state.selectedArea,
             userId = userId,
             data = reportData
         )
@@ -132,8 +170,10 @@ class MapViewModel @Inject constructor(
             _mapState.update { it.copy(isSubmitting = true) }
             submitReportUseCase(report)
                 .onSuccess {
-                    _mapState.value = MapState()  // Reset form
-                    loadUserReports()  // Refresh reports list ✅
+                    _mapState.value = MapState(
+                        treeEntries = listOf(TreeEntry(id = 0, TreeSubType.DECIDUOUS, 0))
+                    )
+                    loadUserReports()
                 }
                 .onFailure { error ->
                     _mapState.update {
@@ -151,7 +191,8 @@ class MapViewModel @Inject constructor(
             it.copy(
                 showDialog = false,
                 selectedArea = emptyList(),
-                isAreaSelected = false
+                isAreaSelected = false,
+                treeEntries = listOf(TreeEntry(id = 0, TreeSubType.DECIDUOUS, 0))
             )
         }
     }
@@ -173,9 +214,7 @@ data class MapState(
     val selectedArea: List<LatLng> = emptyList(),
     val showDialog: Boolean = false,
     val isAreaSelected: Boolean = false,
-    val selectedType: ReportType = ReportType.TREES,
-    val quantity: Int = 0,
-    val height: Double = 0.0,
+    val treeEntries: List<TreeEntry> = listOf(TreeEntry(id = 0, TreeSubType.DECIDUOUS, 0)),
     val isSubmitting: Boolean = false,
     val error: String? = null
 )
