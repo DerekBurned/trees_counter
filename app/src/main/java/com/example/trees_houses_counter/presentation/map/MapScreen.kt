@@ -212,7 +212,6 @@ fun MapContent(
         uiSettings = MapUiSettings(zoomControlsEnabled = false),
         onMapLongClick = onMapLongClick
     ) {
-        // Draw submitted reports
         reports.forEach { report ->
             val strokeColor = Color.Green
             val fillColor = Color.Green.copy(alpha = 0.3f)
@@ -234,7 +233,6 @@ fun MapContent(
             )
         }
 
-        // Draw the active selection area
         if (selectedArea.size == 4) {
             // 1. Create local marker states that re-initialize ONLY when the ViewModel's selectedArea changes
             val cornerMarkerStates = remember(selectedArea) {
@@ -299,7 +297,6 @@ fun DraggableCornerMarker(
     title: String,
     onDragEnd: (LatLng) -> Unit
 ) {
-    // Only fire the callback to the ViewModel when the user drops the marker
     LaunchedEffect(markerState.dragState) {
         if (markerState.dragState == DragState.END) {
             onDragEnd(markerState.position)

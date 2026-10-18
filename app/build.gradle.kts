@@ -36,8 +36,15 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlin{
+        target{
+            compilerOptions {
+                optIn.add("kotlin.RequiresOptIn")
+            }
+        }
     }
 
     buildFeatures {
@@ -75,8 +82,8 @@ dependencies {
 
     // Firebase
     implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth.ktx)
-    implementation(libs.firebase.firestore.ktx)
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
 
     // Google Maps
     implementation(libs.maps.compose)
