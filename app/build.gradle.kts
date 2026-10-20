@@ -1,9 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.services)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+}
+
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -21,7 +27,9 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        val mapsApiKey = project.findProperty("MAPS_API_KEY") as String? ?: ""
+        val mapsApiKey = localProperties.getProperty("MAPS_API_KEY")
+            ?: project.findProperty("MAPS_API_KEY") as String?
+            ?: ""
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
